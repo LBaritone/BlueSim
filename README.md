@@ -1,4 +1,5 @@
 # BlueSim
+<<<<<<< HEAD
 
 BlueSim is a realistic three dimensional simulator to test ideas for collective behaviors with BlueBots.
 
@@ -75,3 +76,6 @@ and within that notebook open one of the following experiment files ending in `.
 
 - `millingabout.ipynb`
 -->
+=======
+BlueSim Repo for simulation of BlueSwarm with additions for measuring coverage of fish cameras and camera models
+>>>>>>> 196cb7102250b790b1d0bc089365a5cb2b542a4f
