@@ -1,5 +1,7 @@
 # BlueSim
 <<<<<<< HEAD
+![alt text](https://github.com/LBaritone/BlueSim/camera.png)
+
 
 BlueSim is a realistic three dimensional simulator to test ideas for collective behaviors with BlueBots.
 
