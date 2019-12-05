@@ -696,6 +696,9 @@ class Fish():
         
         loc = self.interaction.environment.node_pos[self.id]
 
+        self.interaction.environment.arena_size
+
+
         xb, xt, yb, yt, zb, zt = self.variables.get_vars()
 
         if loc[0] < 30:
