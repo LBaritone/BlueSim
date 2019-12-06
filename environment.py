@@ -66,8 +66,6 @@ class Environment():
         self.verbose = verbose
         self.prob_type = prob_type
 
-        self.variables = variables
-
         # Init
         # restrict to tank
         self.node_pos[:,0] = np.clip(self.node_pos[:,0], 0, self.arena_size[0])

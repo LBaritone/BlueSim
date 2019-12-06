@@ -83,6 +83,8 @@ def generate_fish(
     interaction,
     dynamics,
     variables,
+    camera,
+    res,
     w_blindspot,
     r_blocking,
     target_dist,
@@ -132,6 +134,8 @@ def generate_fish(
             interaction=interaction,
             dynamics=dynamics,
             variables=variables,
+            camera=camera,
+            res = res,
             w_blindspot=w_blindspot,
             r_blocking=r_blocking,
             target_dist=target_dist,
@@ -322,14 +326,9 @@ def run_simulation_with_coverage(
         for f in fish:
             f.stop()
 
-        xb, xt, yb, yt, zb, zt = variables.get_vars()
+        slots = variables.get_vars()
 
-        print("xb", len(xb))
-        print("xt", len(xt))
-        print("yb", len(yb))
-        print("yt", len(yt))
-        print("zb", len(zb))
-        print("zt", len(zt))
+        print("slots", slots)
 
         print('It\'s time to say bye bye!')
 

@@ -69,6 +69,8 @@ class Fish():
         interaction,
         dynamics,
         variables,
+        camera,
+        res, 
         w_blindspot=50,
         r_blocking=65,
         target_dist=390,
@@ -105,7 +107,6 @@ class Fish():
         self.channel = channel
         self.interaction = interaction
         self.dynamics = dynamics
-        self.variables = variables
         self.w_blindspot = w_blindspot
         self.r_blocking = r_blocking
         self.target_dist = target_dist
@@ -115,6 +116,12 @@ class Fish():
         self.clock_freq = clock_freq
         self.name = name
         self.verbose = verbose
+
+        self.corners = self.get_corners(res)
+        self.camera = camera
+        self.variables = variables
+        if self.id == 0 :
+            self.variables.set_vars(len(self.corners))
 
         self.caudal = 0
         self.dorsal = 0
@@ -175,6 +182,39 @@ class Fish():
 
     def get_variables(self) :
         return self.variables
+
+    def get_corners(self, res) :
+        arena_size = self.interaction.environment.arena_size
+
+        x_vals = np.linspace(0, arena_size[0], res)
+        y_vals = np.linspace(0, arena_size[1], res)
+        z_vals = np.linspace(0, arena_size[2], res)
+        zero = np.zeros((res, res))
+        x_end = np.full((res, res), arena_size[0])
+        y_end = np.full((res, res), arena_size[1])
+
+        zz, xz = np.meshgrid(z_vals, x_vals)
+        _, yz = np.meshgrid(z_vals, y_vals)
+
+        xz_zz_y_0 = np.array([xz, zero, zz])
+        xz_by_zz_y_0 = xz_zz_y_0.transpose()
+        xz_zz_y_end = np.array([xz, y_end, zz])
+        xz_by_zz_y_end = xz_zz_y_end.transpose()
+
+        yz_zz_x_0 = np.array([zero, yz, zz])
+        yz_by_zz_x_0 = yz_zz_x_0.transpose()
+        yz_zz_x_end = np.array([x_end, yz, zz])
+        yz_by_zz_x_end = yz_zz_x_end.transpose()
+
+        walls = [xz_by_zz_y_0, xz_by_zz_y_end, yz_by_zz_x_0, yz_by_zz_x_end]
+
+        tiles = []
+        for wall in walls :
+            for i in range(res - 1) :
+                for j in range(res - 1) :
+                    four = [wall[i, j], wall[i, j + 1], wall[i + 1, j], wall[i + 1, j + 1]]
+                    tiles.append(four)
+        return tiles
 
     def log(self, neighbors=set()):
         """Log current state
@@ -695,26 +735,14 @@ class Fish():
         self.randomwalk()
         
         loc = self.interaction.environment.node_pos[self.id]
+        vel = self.interaction.environment.node_vel[self.id]
+        self.camera.set_camera(loc, vel)
 
-        self.interaction.environment.arena_size
+        for i in range(len(self.corners)) :
+            tile = self.corners[i]
+            if self.camera.captured_by_camera(tile) :
+                self.variables.set_var(i, 1)
 
-
-        xb, xt, yb, yt, zb, zt = self.variables.get_vars()
-
-        if loc[0] < 30:
-            xb.add((loc[1] // 100, loc[2] // 100))
-        elif loc[0] > 1750: # hardcode for now
-            xt.add((loc[1] // 100, loc[2] // 100))
-        if loc[1] < 30:
-            yb.add((loc[0] // 100, loc[2] // 100))
-        elif loc[1] > 1750:
-            yt.add((loc[0] // 100, loc[2] // 100))
-        if loc[2] < 30:
-            zb.add((loc[0] // 100, loc[1] // 100))
-        elif loc[2] > 1140:
-            zt.add((loc[0] // 100, loc[1] // 100))
-
-        self.variables.set_vars(xb, xt, yb, yt, zb, zt)
 
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
         final_move = self.dynamics.simulate_move(self.id)

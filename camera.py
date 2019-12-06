@@ -17,13 +17,13 @@ class Camera() :
 
         self.depth = 10
 
-    def set_camera(self, x, y, z, u, v, w) :
-        self.x = x
-        self.y = y
-        self.z = z
-        self.u = u
-        self.v = v
-        self.w = w
+    def set_camera(self, pos, vel) :
+        self.x = pos[0]
+        self.y = pos[1]
+        self.z = pos[2]
+        self.u = vel[0]
+        self.v = vel[1]
+        self.w = vel[2]
 
     def get_camera(self) :
 
@@ -65,8 +65,8 @@ class Camera() :
         cam_corners = self.get_camera()
         center = np.array([self.x, self.y, self.z])
 
-        top_left, top_right, bot_left, bot_right = 
-            [np.array(x) for x in tile_corners]
+        top_left, top_right, bot_left, bot_right = [np.array(x) for x in tile_corners]
+        tile_corners = [top_left, top_right, bot_left, bot_right]
 
 
         # intersect plane and line: 
@@ -80,29 +80,47 @@ class Camera() :
         n = np.cross(side_vec, top_vec)
         w = center - top_left 
 
-        for cam in cam_corners :
+        tile_in_cam = [True, True]
+        for i in range(len(cam_corners)) :
+            cam = cam_corners[i]
+            # change to: find four intersections of 4 corner rays of camera on 
+            # tile plane, then check to see if if all four corners of tile are 
+            # within distance D to center (approximate outer image rectangle)
+            # check to see if all four tile corners are contained within the outer
+            # plane intersection with camera rays rectangle 
+
+            inters_tile_plane = []
             for ray_point in cam :
                 ray = np.array(ray_point) - center
                 u = ray / np.linalg.norm(ray)
                 s = - np.dot(n, w) / np.dot(n, u)
 
                 inter = w + (s * u) + top_left 
+                inters_tile_plane.append(inter)
 
+            inter_top_l_top_r = inters_tile_plane[1] - inters_tile_plane[0]
+            inter_top_l_bot_l = inters_tile_plane[2] - inters_tile_plane[0]
+            inter_rect_area = np.linalg.norm(np.cross(inter_top_l_bot_l, 
+                                                      inter_top_l_top_r))
+
+            for tile_pt in tile_corners :
                 # condition for point inside box: 4 triangles area must = 
                 # area of rectangle
-                top_left_pt = inter - top_left
-                pt_bot_left = bot_left - inter
-                bot_right_pt = inter - bot_right
-                pt_top_right = top_right - inter
+                top_left_pt = tile_pt - inters_tile_plane[0]
+                pt_bot_left = inters_tile_plane[2] - tile_pt
+                bot_right_pt = tile_pt - inters_tile_plane[3]
+                pt_top_right = inters_tile_plane[1] - tile_pt
 
-                tri_area = 0.5 * np.cross(top_left_pt, pt_bot_left)
-                tri_area += 0.5 * np.cross(bot_right_pt, pt_top_right)
-                tri_area += 0.5 * np.cross(bot_right_pt, pt_bot_left)
-                tri_area += 0.5 * np.cross(top_left_pt, pt_top_right)
+                tri_area = 0.5 * np.linalg.norm(np.cross(top_left_pt, pt_bot_left))
+                tri_area += 0.5 * np.linalg.norm(np.cross(bot_right_pt, pt_top_right))
+                tri_area += 0.5 * np.linalg.norm(np.cross(bot_right_pt, pt_bot_left))
+                tri_area += 0.5 * np.linalg.norm(np.cross(top_left_pt, pt_top_right))
 
-                if tri_area > (self.rect_area + 0.05) :
-                    return False
-        return True
+                if tri_area > (inter_rect_area + 0.05) and (
+                    np.linalg.norm(tile_pt) >= self.depth) :
+                    tile_in_cam[i] = False
+
+        return tile_in_cam[0] or tile_in_cam[1]
 
 
 
