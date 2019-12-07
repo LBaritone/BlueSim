@@ -2,11 +2,7 @@ import numpy as np
 
 class Camera() :
 
-    def __init__(self, depth, width, height) :
-        self.depth = depth
-        self.width = width
-        self.height = height
-        self.area = self.width * self.height
+    def __init__(self, depth) :
 
         self.x = 0
         self.y = 0
@@ -17,7 +13,7 @@ class Camera() :
 
         self.K = np.eye(3, 3)
 
-        self.depth = 10
+        self.depth = depth
 
     def set_camera(self, pos, vel) :
         self.x = pos[0]
