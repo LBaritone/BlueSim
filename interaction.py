@@ -189,10 +189,16 @@ class Interaction():
         """
         node_pos = self.environment.node_pos[source_id]
         target_pos = node_pos + target_direction
+        old_target_pos = target_pos.copy()
         # Restrict to tank
         target_pos[0] = np.clip(target_pos[0], 0, self.environment.arena_size[0])
         target_pos[1] = np.clip(target_pos[1], 0, self.environment.arena_size[1])
         target_pos[2] = np.clip(target_pos[2], 0, self.environment.arena_size[2])
+        
+        for i in range(3):
+            if (target_pos != old_target_pos)[i]:
+                target_pos[i] = node_pos[i] - target_direction[i]
+                self.environment.node_vel[source_id][i] = - self.environment.node_vel[source_id][i]
 
         final_pos = self.environment.get_distorted_pos(source_id, target_pos)
         final_pos[0] = np.clip(final_pos[0], 0, self.environment.arena_size[0])
