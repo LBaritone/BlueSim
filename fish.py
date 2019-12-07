@@ -505,7 +505,12 @@ class Fish():
         return center
 
     def lj_force(self, neighbors, rel_pos):
-        """lj_force derives the Lennard-Jones potential and force based on the relative positions of all neighbors and the desired self.target_dist to neighbors. The force is a gain factor, attracting or repelling a fish from a neighbor. The center is a point in space toward which the fish will move, based on the sum of all weighted neighbor positions.
+        """lj_force derives the Lennard-Jones potential and force based on the 
+            relative positions of all neighbors and the desired self.target_dist 
+            to neighbors. The force is a gain factor, attracting or repelling a 
+            fish from a neighbor. The center is a point in space toward which 
+            the fish will move, based on the sum of all weighted neighbor 
+            positions.
 
         Args:
             neighbors (set): Visible neighbors
@@ -745,11 +750,6 @@ class Fish():
         loc = self.interaction.environment.node_pos[self.id]
         vel = self.interaction.environment.node_vel[self.id]
         self.camera.set_camera(loc, vel)
-
-        # print(vel)
-        # P1, P2 = self.camera.get_camera()
-        # print(P1)
-        # print(P2)
 
         for i in range(len(self.corners)) :
             tile = self.corners[i]

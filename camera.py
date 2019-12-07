@@ -2,7 +2,7 @@ import numpy as np
 
 class Camera() :
 
-    def __init__(self, depth) :
+    def __init__(self, depth, f1, f2) :
 
         self.x = 0
         self.y = 0
@@ -12,6 +12,8 @@ class Camera() :
         self.w = 0
 
         self.K = np.eye(3, 3)
+        self.K[0, 0] = f1
+        self.K[1, 1] = f2
 
         self.depth = depth
 
@@ -52,6 +54,9 @@ class Camera() :
 
         P_left = np.concatenate([R_left, t_left.reshape(-1, 1)], axis=1)
         P_right = np.concatenate([R_right, t_right.reshape(-1, 1)], axis=1)
+
+        P_left = np.dot(self.K, P_left)
+        P_right = np.dot(self.K, P_right)
 
         return [P_left, P_right]
 
