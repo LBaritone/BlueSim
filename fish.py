@@ -699,16 +699,67 @@ class Fish():
             self.dorsal = 1
         if np.random.random() < 0.33:
             self.pect_l = 0
-            self.pect_r = 0.5
+            self.pect_r = np.random.random()
             self.caudal = 0.1
         elif np.random.random() < 0.5:
-            self.pect_l = 0.5
+            self.pect_l = np.random.random()
             self.pect_r = 0
             self.caudal = 0.1
         else:
             self.pect_l = 0
             self.pect_r = 0
             self.caudal = 0.45
+            
+    def repel(self, neighbors, rel_pos):
+        # Get the centroid of the swarm
+        centroid_pos = np.zeros((3,))
+
+        # Get the relative direction to the centroid of the swarm
+        bestnorm = 1000000
+        bestkey = -1
+        if len(rel_pos.keys()) == 0:
+            self.randomwalk()
+            return
+        for key in rel_pos.keys():
+            norm = np.linalg.norm(rel_pos[key])
+            if (norm < bestnorm):
+                bestnorm = norm
+                bestkey = key
+        centroid_pos = rel_pos[bestkey]
+        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
+
+        #move = self.target_pos + centroid_pos
+        move = - centroid_pos / (bestnorm + 1)
+
+        # Global to Robot Transformation
+        r_T_g = self.interaction.rot_global_to_robot(self.id)
+        r_move_g = r_T_g @ move
+
+
+        self.depth_ctrl(r_move_g)
+        self.home(r_move_g)
+        
+    def repel_with_memory(self, neighbors, rel_pos):
+        # Get the centroid of the swarm
+        centroid_pos = np.zeros((3,))
+
+        # Get the relative direction to the centroid of the swarm
+        centroid_pos = self.lj_force(neighbors, rel_pos)
+        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
+
+        #move = self.target_pos + centroid_pos
+        if (self.movement is None):
+            self.movement = - centroid_pos
+        else:
+            self.movement = 0.1 * (- centroid_pos) + 0.9 * self.movement
+
+        # Global to Robot Transformation
+        r_T_g = self.interaction.rot_global_to_robot(self.id)
+        r_move_g = r_T_g @ self.movement
+
+
+        self.depth_ctrl(r_move_g)
+        self.home(r_move_g)
 
     def move(self, neighbors, rel_pos):
         """Make a cohesion and target-driven move
@@ -735,17 +786,9 @@ class Fish():
         # Simulate dynamics and restrict movement #xx
         self.depth_ctrl(r_move_g)
 
-        target_dist = 400
-        if self.behavior == 'home':
-            dist_filtered = np.linalg.norm(r_move_g)
-            if dist_filtered < target_dist * 1.2:
-                self.behavior = 'transition'
-            else:
-                self.home(r_move_g)
-        elif self.behavior == 'transition':
-            self.transition(r_move_g)
-        elif self.behavior == 'orbit':
-            self.orbit(r_move_g, target_dist)
+        #self.depth_ctrl(r_move_g)
+        #self.home(r_move_g)
+        self.repel(neighbors, rel_pos)
         
         loc = self.interaction.environment.node_pos[self.id]
         vel = self.interaction.environment.node_vel[self.id]
