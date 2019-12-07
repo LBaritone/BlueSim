@@ -23,13 +23,16 @@ R_right = np.array([[np.dot(x_w, x_c_right), np.dot(y_w, x_c_right), np.dot(z_w,
                    [np.dot(x_w, y_c), np.dot(y_w, y_c), np.dot(z_w, y_c)],
                    [np.dot(x_w, z_c_right), np.dot(y_w, z_c_right), np.dot(z_w, z_c_right)]])
 
+print(R_left)
+print(R_right)
+
 t_left = - np.dot(R_left, center)
 t_right = - np.dot(R_right, center)
 
 P_left = np.concatenate([R_left, t_left.reshape(-1, 1)], axis=1)
 P_right = np.concatenate([R_right, t_right.reshape(-1, 1)], axis=1)
 
-test = np.array([1.1, 0, 1, 1]).reshape(-1, 1)
+test = np.array([2, 0, 1, 1]).reshape(-1, 1)
 
 W = 1
 w = np.dot(P_left, test)[-1]

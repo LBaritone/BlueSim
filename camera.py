@@ -25,13 +25,13 @@ class Camera() :
 
     def get_camera(self) :
 
-        center = np.array([1, 0, 1])
+        center = np.array([self.x, self.y, self.z])
         x_w = np.array([1, 0, 0])
         y_w = np.array([0, 1, 0])
         z_w = np.array([0, 0, 1])
 
         y_c = np.array([0, 0, 1])
-        x_c = np.array([0, 1, 0])
+        x_c = np.array([self.u, self.v, self.w])
         x_c_left = x_c / np.linalg.norm(x_c)
         x_c_right = - x_c_left
 
@@ -56,27 +56,27 @@ class Camera() :
         return [P_left, P_right]
 
 
-    def captured_by_camera(self, tile_corners) :
+    def captured_by_camera(self, pt) :
 
         P_left, P_right = self.get_camera()
 
-        contained = np.array([False, False, False, False])
-        for i in range(len(tile_corners)) :
-            pt = tile_corners[i]
-            test = np.append(pt, 1).reshape(-1, 1)
-            W = test[-1]
-            w_left = np.dot(P_left, test)[-1]
-            w_right = np.dot(P_right, test)[-1]
+        contained = False
+        test = np.append(pt, 1).reshape(-1, 1)
+        W = test[-1]
+        w_left = np.dot(P_left, test)[-1]
+        w_right = np.dot(P_right, test)[-1]
 
-            depth_left = (w_left * np.sign(np.linalg.det(P_left[:, :-1]))) / (W * np.linalg.norm(P_left[-1, 0:-1]))
-            depth_right = (w_right * np.sign(np.linalg.det(P_right[:, :-1]))) / (W * np.linalg.norm(P_right[-1, 0:-1]))
+        depth_left = (w_left * np.sign(np.linalg.det(P_left[:, :-1]))) / (W * np.linalg.norm(P_left[-1, 0:-1]))
+        depth_right = (w_right * np.sign(np.linalg.det(P_right[:, :-1]))) / (W * np.linalg.norm(P_right[-1, 0:-1]))
 
-            if ((depth_left > 0 and depth_left < self.depth) or 
-                (depth_right > 0 and depth_right < self.depth)) :
-                contained[i] = True
+        depth_left = depth_left[0]
+        depth_right = depth_right[0]
 
-        return contained.any()
-        # return contained.all()
+        if ((depth_left > 0 and depth_left < self.depth) or 
+            (depth_right > 0 and depth_right < self.depth)) :
+            contained = True
+
+        return contained
 
 
 

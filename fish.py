@@ -208,12 +208,19 @@ class Fish():
 
         walls = [xz_by_zz_y_0, xz_by_zz_y_end, yz_by_zz_x_0, yz_by_zz_x_end]
 
+        # tiles = []
+        # for wall in walls :
+        #     for i in range(res - 1) :
+        #         for j in range(res - 1) :
+        #             four = [wall[i, j], wall[i, j + 1], wall[i + 1, j], wall[i + 1, j + 1]]
+        #             tiles.append(four)
+        # return tiles
+
         tiles = []
         for wall in walls :
-            for i in range(res - 1) :
-                for j in range(res - 1) :
-                    four = [wall[i, j], wall[i, j + 1], wall[i + 1, j], wall[i + 1, j + 1]]
-                    tiles.append(four)
+            for i in range(res) :
+                for j in range(res) :
+                    tiles.append(wall[i, j])
         return tiles
 
     def log(self, neighbors=set()):
@@ -714,29 +721,35 @@ class Fish():
         Returns:
             np.array -- Move direction as a 3D vector
         """
-
-        # Get the centroid of the swarm
-        #centroid_pos = np.zeros((3,))
-
-        # Get the relative direction to the centroid of the swarm
-        #centroid_pos = self.lj_force(neighbors, rel_pos)
-        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
-
-        #move = self.target_pos + centroid_pos
-        #move = - centroid_pos
-
+        centroid_pos = np.zeros((3,))
+        move = self.target_pos# + centroid_pos
         # Global to Robot Transformation
-        #r_T_g = self.interaction.rot_global_to_robot(self.id)
-        #r_move_g = r_T_g @ move
+        r_T_g = self.interaction.rot_global_to_robot(self.id)
+        r_move_g = r_T_g @ move
 
+        # Simulate dynamics and restrict movement #xx
+        self.depth_ctrl(r_move_g)
 
-        #self.depth_ctrl(r_move_g)
-        #self.home(r_move_g)
-        self.randomwalk()
+        target_dist = 400
+        if self.behavior == 'home':
+            dist_filtered = np.linalg.norm(r_move_g)
+            if dist_filtered < target_dist * 1.2:
+                self.behavior = 'transition'
+            else:
+                self.home(r_move_g)
+        elif self.behavior == 'transition':
+            self.transition(r_move_g)
+        elif self.behavior == 'orbit':
+            self.orbit(r_move_g, target_dist)
         
         loc = self.interaction.environment.node_pos[self.id]
         vel = self.interaction.environment.node_vel[self.id]
         self.camera.set_camera(loc, vel)
+
+        # print(vel)
+        # P1, P2 = self.camera.get_camera()
+        # print(P1)
+        # print(P2)
 
         for i in range(len(self.corners)) :
             tile = self.corners[i]
