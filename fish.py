@@ -737,6 +737,7 @@ class Fish():
 
         #move = self.target_pos + centroid_pos
         move = - centroid_pos / (bestnorm + 1)
+        self.caudal = 0.3
 
         # Global to Robot Transformation
         r_T_g = self.interaction.rot_global_to_robot(self.id)
