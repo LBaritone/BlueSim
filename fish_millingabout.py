@@ -135,13 +135,14 @@ class Fish():
         self.clock_speed = 1 / self.clock_freq
         self.clock = 0
         self.queue = Queue()
+        arena_size = self.interaction.environment.arena_size
         self.target_pos = np.zeros((3,))
+        self.target_pos[2] = np.random.choice(arena_size[2])
         self.is_started = False
         self.neighbors = set()
 
         self.status = None
-        self.behavior = 'turn'
-        self.cur_wall = None
+        self.behavior = 'home'
 
         self.info = None  # Some information
         self.info_clock = 0  # Time stamp of the information, i.e., the clock
@@ -483,6 +484,67 @@ class Fish():
             LeaderElection(self.id, self.id)
         ))
 
+    def comp_center(self, rel_pos):
+        """Compute the (potentially weighted) centroid of the fish neighbors
+
+        Arguments:
+            rel_pos {dict} -- Dictionary of relative positions to the
+                neighboring fish.
+
+        Returns:
+            np.array -- 3D centroid
+        """
+        center = np.zeros((3,))
+        n = max(1, len(rel_pos))
+
+        for key, value in rel_pos.items():
+            weight = self.weight_neighbor(value)
+            center += value * weight
+
+        center /= n
+
+        if self.verbose:
+            print('Fish #{}: swarm centroid {}'.format(self.id, center))
+
+        return center
+
+    def lj_force(self, neighbors, rel_pos):
+        """lj_force derives the Lennard-Jones potential and force based on the 
+            relative positions of all neighbors and the desired self.target_dist 
+            to neighbors. The force is a gain factor, attracting or repelling a 
+            fish from a neighbor. The center is a point in space toward which 
+            the fish will move, based on the sum of all weighted neighbor 
+            positions.
+
+        Args:
+            neighbors (set): Visible neighbors
+            rel_pos (dict): Relative positions of visible neighbors
+
+        Returns:
+            np.array: Weighted 3D direction based on visible neighbors
+        """
+        if not neighbors:
+            return np.zeros((3,))
+
+        a = 12 # 12
+        b = 6 # 6
+        epsilon = 100 # depth of potential well, V_LJ(r_target) = epsilon
+        gamma = 100 # force gain
+        r_target = self.target_dist
+        r_const = r_target + 1 * self.body_length
+
+        center = np.zeros((3,))
+        n = len(neighbors)
+
+        for neighbor in neighbors:
+            r = np.clip(np.linalg.norm(rel_pos[neighbor]), 0.001, r_const)
+            f_lj = -gamma * epsilon /r * (a * (r_target / r)**a - 2 * b * (r_target / r)**b)
+            center += f_lj * rel_pos[neighbor]
+
+        center /= n
+
+        return center
+
     def depth_ctrl(self, r_move_g):
         """Controls diving depth based on direction of desired move.
 
@@ -495,6 +557,24 @@ class Fish():
             self.dorsal = 1
         elif pitch < -1:
             self.dorsal = 0
+
+        # self.dorsal = 0.5
+
+    def depth_waltz(self, r_move_g):
+        """Controls diving depth in a pressure sensor fashion. Own depth is "measured", i.e. reveiled by the interaction. Depth control is then done based on a target depth coming from a desired goal location in the robot frame.
+
+        Args:
+            r_move_g (np.array): Relative position of desired goal location in robot frame.
+        """
+        depth = self.interaction.perceive_depth(self.id)
+
+        if self.target_depth == 0:
+            self.target_depth = depth + r_move_g[2] / 2
+
+        if depth > self.target_depth:
+            self.dorsal = 0
+        else:
+            self.dorsal = 1
 
     def home(self, r_move_g):
         """Homing behavior. Sets fin controls to move toward a desired goal location.
@@ -512,7 +592,7 @@ class Fish():
             self.pect_r = 0
 
             if heading < caudal_range:
-                self.caudal = min(1, 0.1 + np.linalg.norm(r_move_g[0:2])/(8*self.body_length))
+                self.caudal = min(0.2, 0.1 + np.linalg.norm(r_move_g[0:2])/(8*self.body_length))
             else:
                 self.caudal = 0
 
@@ -522,11 +602,182 @@ class Fish():
             self.pect_l = 0
 
             if heading > -caudal_range:
-                self.caudal = min(1, 0.1 + np.linalg.norm(r_move_g[0:2])/(8*self.body_length))
+                self.caudal = min(0.2, 0.1 + np.linalg.norm(r_move_g[0:2])/(8*self.body_length))
             else:
                 self.caudal = 0
 
+    def collisions(self, r_move_g):
+        """Local collision avoidance where r_move_g comes from a local Lennard-Jones potential.
 
+        Args:
+            r_move_g (np.array): Relative position of desired goal location in robot frame.
+        """
+        caudal_range = 20 # abs(heading) below which caudal fin is switched on
+
+        heading = np.arctan2(r_move_g[1], r_move_g[0]) * 180 / math.pi
+
+        # target to the right
+        if heading > 0:
+            self.pect_l = min(1, 0.6 + abs(heading) / 180)
+
+            if heading < caudal_range:
+                self.caudal = min(self.caudal+0.5, self.caudal+0.2 + np.linalg.norm(r_move_g[0:2])/(8*self.body_length))
+
+        # target to the left
+        else:
+            self.pect_r += min(1, 0.6 + abs(heading) / 180)
+
+            if heading > -caudal_range:
+                self.caudal = min(self.caudal+0.5, self.caudal+0.2 + np.linalg.norm(r_move_g[0:2])/(8*self.body_length))
+
+    def transition(self, r_move_g):
+        """Transitions between homing and orbiting. Uses pectoral right fin to align tangentially with the orbit.
+
+        Args:
+            r_move_g (np.array): Relative position of desired goal location in robot frame.
+        """
+        self.caudal = 0
+        self.pect_l = 0
+        self.pect_r = 1
+
+        heading = np.arctan2(r_move_g[1], r_move_g[0]) * 180 / math.pi
+
+        if heading > 35:
+            self.pect_r = 0
+            self.behavior = 'orbit'
+
+    def orbit(self, r_move_g, target_dist):
+        """Orbits an object, e.g. two vertically stacked LEDs, at a predefined radius
+
+        Uses four zones to control the orbit with pectoral and caudal fins. The problem is reduced to 2D and depth control is handled separately.
+        Could make fin frequencies dependent on distance and heading, i.e., use proportianl control.
+
+        Args:
+            r_move_g (np.array): Relative position of desired goal location in robot frame.
+            target_dist (int): Target orbiting radius, [mm]
+        """
+        dist = np.linalg.norm(r_move_g[0:2]) # 2D, ignoring z
+        heading = np.arctan2(r_move_g[1], r_move_g[0]) * 180 / math.pi
+
+        if dist > target_dist:
+            if heading < 90:
+                self.caudal = 0.4
+                self.pect_l = 0
+                self.pect_r = 0
+            else:
+                # push fish into center
+                self.caudal = 0.25
+                self.pect_l = 1
+                self.pect_r = 0
+        else:
+            if heading < 90:
+                # push fish away from center
+                self.caudal = 0.4
+                self.pect_l = 0
+                self.pect_r = 1
+            else:
+                # continue to out of center 
+                self.caudal = 0.4
+                self.pect_l = 0
+                self.pect_r = 0
+
+    def circling(self, neighbors, rel_pos):
+        sensing_angle = 45 #deg
+
+        if not neighbors:
+            self.pect_l = 0
+            self.pect_r = 0.5
+            self.caudal = 0.1
+            return
+        
+        someone = self.interaction.see_circlers(self.id, neighbors, rel_pos, sensing_angle)
+
+        if someone:
+            self.pect_r = 0
+            self.pect_l = 0.5
+            self.caudal = 0.1
+        else:
+            self.pect_l = 0
+            self.pect_r = 0.5
+            self.caudal = 0.1
+            
+    def randomwalk(self):
+        if np.random.random() < 0.5:
+            self.dorsal = 0
+        else:
+            self.dorsal = 1
+        if np.random.random() < 0.33:
+            self.pect_l = 0
+            self.pect_r = np.random.random()
+            self.caudal = 0.1
+        elif np.random.random() < 0.5:
+            self.pect_l = np.random.random()
+            self.pect_r = 0
+            self.caudal = 0.1
+        else:
+            self.pect_l = 0
+            self.pect_r = 0
+            self.caudal = 0.45
+            
+    def repel(self, neighbors, rel_pos):
+        # Get the centroid of the swarm
+        centroid_pos = np.zeros((3,))
+
+        # Get the relative direction to the centroid of the swarm
+        bestnorm = 1000000
+        bestkey = -1
+        n = len(rel_pos.keys())
+        if n == 0:
+            self.randomwalk()
+            return
+        # for key in rel_pos.keys():
+        #     norm = np.linalg.norm(rel_pos[key])
+        #     if (norm < bestnorm):
+        #         bestnorm = norm
+        #         bestkey = key
+        # centroid_pos = rel_pos[bestkey]
+        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
+
+        weights = np.zeros((np.max(list(rel_pos.keys())) + 1, ))
+        for key in rel_pos :
+            weights[key] = np.linalg.norm(rel_pos[key])
+        weights = weights / np.sum(weights)
+
+        for key, value in rel_pos.items():
+            centroid_pos += value * weights[key]
+
+        #move = self.target_pos + centroid_pos
+        move = - centroid_pos
+        self.caudal = 0.4
+
+        # Global to Robot Transformation
+        r_T_g = self.interaction.rot_global_to_robot(self.id)
+        r_move_g = r_T_g @ move
+
+        self.depth_ctrl(r_move_g)
+        self.home(r_move_g)
+        
+    def repel_with_memory(self, neighbors, rel_pos):
+        # Get the centroid of the swarm
+        centroid_pos = np.zeros((3,))
+
+        # Get the relative direction to the centroid of the swarm
+        centroid_pos = self.lj_force(neighbors, rel_pos)
+        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
+
+        #move = self.target_pos + centroid_pos
+        if (self.movement is None):
+            self.movement = - centroid_pos
+        else:
+            self.movement = 0.1 * (- centroid_pos) + 0.9 * self.movement
+
+        # Global to Robot Transformation
+        r_T_g = self.interaction.rot_global_to_robot(self.id)
+        r_move_g = r_T_g @ self.movement
+
+
+        self.depth_ctrl(r_move_g)
+        self.home(r_move_g)
 
     def move(self, neighbors, rel_pos):
         """Make a cohesion and target-driven move
@@ -544,122 +795,33 @@ class Fish():
         Returns:
             np.array -- Move direction as a 3D vector
         """
-        # Coordination
+
+        centroid_pos = np.zeros((3,))
+        move = self.target_pos# + centroid_pos
+        # Global to Robot Transformation
+        r_T_g = self.interaction.rot_global_to_robot(self.id)
+        r_move_g = r_T_g @ move
+        # Simulate dynamics and restrict movement #xx
+        self.depth_ctrl(r_move_g)
+        
+        # Orbiting
         #################################################
-        loc = self.interaction.environment.node_pos[self.id]
-        arena_size = self.interaction.environment.arena_size
+        target_dist = 700
 
-        # if self.behavior == "scatter" :
-        #     walls = np.array([0, 1, 2, 3])
-        #     closest = np.random.choice(walls)
-        #     if closest == 0 :
-        #         self.target_pos = np.array([15, 0, 1])
-        #     elif closest == 1 :
-        #         self.target_pos = np.array([arena_size[0] - 15, arena_size[1], 1])
-        #     elif closest == 2 :
-        #         self.target_pos = np.array([arena_size[0], 15, 1])
-        #     else :
-        #         self.target_pos = np.array([0, arena_size[1] - 15, 1])
+        if self.behavior == 'home':
+            dist_filtered = np.linalg.norm(r_move_g)
+            if dist_filtered < target_dist * 1.2:
+                self.behavior = 'transition'
+            else:
+                self.home(r_move_g)
+        elif self.behavior == 'transition':
+            self.transition(r_move_g)
+        elif self.behavior == 'orbit':
+            self.orbit(r_move_g, target_dist)
+        # Orbiting
+        #################################################
 
-        #     # if in the upper 4th, move to the bottom, vis versa
-        #     if loc[2] > (arena_size[2] - (arena_size[2] / 4)) :
-        #         self.target_pos[2] = 0 
-        #         self.dorsal = 0
-        #     elif loc[2] < (arena_size[2] / 4) :
-        #         self.target_pos[2] = arena_size[2]
-        #         self.caudal = 1
-        #         self.dorsal = 1
-
-        #     move = self.target_pos# + centroid_pos
-        #     # Global to Robot Transformation
-        #     r_T_g = self.interaction.rot_global_to_robot(self.id)
-        #     r_move_g = r_T_g @ move
-        #     # Simulate dynamics and restrict movement #xx
-        #     # self.depth_ctrl(r_move_g)
-        #     self.home(r_move_g)
-        #     self.caudal = 1
-
-        #     self.behavior = "forward"
-
-        if self.behavior == "turn" :
-            
-            diff_x_0 = loc[0]
-            diff_x_end = arena_size[0] - loc[0]
-            diff_y_0 = loc[1]
-            diff_y_end = arena_size[1] - loc[1]
-            walls = np.array([diff_x_0, diff_x_end, diff_y_0, diff_y_end])
-            closest = np.argmin(walls)
-
-            if diff_x_0 < 15 and diff_y_0 < 15 :
-                closest = 1
-            elif diff_y_0 < 15 and diff_x_end < 15 :
-                closest = 3
-            elif diff_x_end < 15 and diff_y_end < 15 :
-                closest = 0
-            elif diff_y_end < 15 and diff_x_0 < 15 :
-                closest = 2
-
-            if closest == 0 :
-                self.target_pos = np.array([15, 0, 1])
-            elif closest == 1 :
-                self.target_pos = np.array([arena_size[0] - 15, arena_size[1], 1])
-            elif closest == 2 :
-                self.target_pos = np.array([arena_size[0], 15, 1])
-            else :
-                self.target_pos = np.array([0, arena_size[1] - 15, 1])
-                
-
-            # if in the upper 4th, move to the bottom, vis versa
-            if loc[2] > (arena_size[2] - (arena_size[2] / 4)) :
-                self.target_pos[2] = 0 
-                self.dorsal = 0
-            elif loc[2] < (arena_size[2] / 4) :
-                self.target_pos[2] = arena_size[2]
-                self.caudal = 1
-                self.dorsal = 1
-
-            move = self.target_pos# + centroid_pos
-            # Global to Robot Transformation
-            r_T_g = self.interaction.rot_global_to_robot(self.id)
-            r_move_g = r_T_g @ move
-            # Simulate dynamics and restrict movement #xx
-            # self.depth_ctrl(r_move_g)
-            self.home(r_move_g)
-            self.caudal = 1
-
-            self.behavior = "forward"
-
-        elif self.behavior == "forward" :
-
-            diff_x_0 = loc[0]
-            diff_x_end = arena_size[0] - loc[0]
-            diff_y_0 = loc[1]
-            diff_y_end = arena_size[1] - loc[1]
-            walls = np.array([diff_x_0, diff_x_end, diff_y_0, diff_y_end])
-            close_walls = np.argsort(walls)
-
-            # if in the upper 4th, move to the bottom, vis versa
-            if loc[2] > (arena_size[2] - (arena_size[2] / 4)) :
-                self.target_pos[2] = 0 
-                self.dorsal = 0
-            elif loc[2] < (arena_size[2] / 4) :
-                self.target_pos[2] = arena_size[2]
-                self.dorsal = 1
-
-            move = self.target_pos# + centroid_pos
-            # Global to Robot Transformation
-            r_T_g = self.interaction.rot_global_to_robot(self.id)
-            r_move_g = r_T_g @ move
-            # self.depth_ctrl(r_move_g)
-            self.home(r_move_g)
-            self.caudal = 1   
-
-
-            if ((diff_x_0 < 30 and diff_y_0 < 30) or 
-                (diff_y_0 < 30 and diff_x_end < 30) or 
-                (diff_x_end < 30 and diff_y_end < 30) or
-                (diff_y_end < 30 and diff_x_0 < 30)) :
-                self.behavior = "turn"
+        # self.repel(neighbors, rel_pos)
 
         loc = self.interaction.environment.node_pos[self.id]
         vel = self.interaction.environment.node_vel[self.id]

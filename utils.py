@@ -328,7 +328,7 @@ def run_simulation_with_coverage(
 
         slots = variables.get_vars()
 
-        print("slots", slots)
+        print("slots", repr(slots))
 
         print('It\'s time to say bye bye!')
 
