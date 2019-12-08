@@ -6,6 +6,8 @@ from queue import Queue
 import time
 import datetime
 
+import variables
+
 from events import HopCount, Ping, InfoInternal, LeaderElection
 from eventcodes import (
     PING, HOMING, HOP_COUNT, INFO_EXTERNAL, INFO_INTERNAL, START_HOP_COUNT,
@@ -68,9 +70,6 @@ class Fish():
         channel,
         interaction,
         dynamics,
-        variables,
-        camera,
-        res, 
         w_blindspot=50,
         r_blocking=65,
         target_dist=390,
@@ -116,13 +115,6 @@ class Fish():
         self.clock_freq = clock_freq
         self.name = name
         self.verbose = verbose
-
-        self.corners = self.get_corners(res)
-        self.camera = camera
-        self.variables = variables
-        if self.id == 0 :
-            print(self.corners.shape)
-            self.variables.set_vars(self.corners.shape)
 
         self.caudal = 0
         self.dorsal = 0
@@ -180,50 +172,6 @@ class Fish():
         This sets `is_started` to false.
         """
         self.is_started = False
-
-    def get_variables(self) :
-        return self.variables
-
-    def get_corners(self, res) :
-        arena_size = self.interaction.environment.arena_size
-
-        x_vals = np.linspace(0, arena_size[0], res)
-        y_vals = np.linspace(0, arena_size[1], res)
-        z_vals = np.linspace(0, arena_size[2], res)
-        zero = np.zeros((res, res))
-        x_end = np.full((res, res), arena_size[0])
-        y_end = np.full((res, res), arena_size[1])
-
-        zz, xz = np.meshgrid(z_vals, x_vals)
-        _, yz = np.meshgrid(z_vals, y_vals)
-
-        xz_zz_y_0 = np.array([xz, zero, zz])
-        xz_by_zz_y_0 = xz_zz_y_0.transpose()
-        xz_zz_y_end = np.array([xz, y_end, zz])
-        xz_by_zz_y_end = xz_zz_y_end.transpose()
-
-        yz_zz_x_0 = np.array([zero, yz, zz])
-        yz_by_zz_x_0 = yz_zz_x_0.transpose()
-        yz_zz_x_end = np.array([x_end, yz, zz])
-        yz_by_zz_x_end = yz_zz_x_end.transpose()
-
-        walls = np.array([xz_by_zz_y_0, xz_by_zz_y_end, yz_by_zz_x_0, yz_by_zz_x_end])
-        return walls 
-
-        # tiles = []
-        # for wall in walls :
-        #     for i in range(res - 1) :
-        #         for j in range(res - 1) :
-        #             four = [wall[i, j], wall[i, j + 1], wall[i + 1, j], wall[i + 1, j + 1]]
-        #             tiles.append(four)
-        # return tiles
-
-        # tiles = []
-        # for wall in walls :
-        #     for i in range(res) :
-        #         for j in range(res) :
-        #             tiles.append(wall[i, j])
-        # return tiles
 
     def log(self, neighbors=set()):
         """Log current state
@@ -507,12 +455,7 @@ class Fish():
         return center
 
     def lj_force(self, neighbors, rel_pos):
-        """lj_force derives the Lennard-Jones potential and force based on the 
-            relative positions of all neighbors and the desired self.target_dist 
-            to neighbors. The force is a gain factor, attracting or repelling a 
-            fish from a neighbor. The center is a point in space toward which 
-            the fish will move, based on the sum of all weighted neighbor 
-            positions.
+        """lj_force derives the Lennard-Jones potential and force based on the relative positions of all neighbors and the desired self.target_dist to neighbors. The force is a gain factor, attracting or repelling a fish from a neighbor. The center is a point in space toward which the fish will move, based on the sum of all weighted neighbor positions.
 
         Args:
             neighbors (set): Visible neighbors
@@ -555,8 +498,6 @@ class Fish():
             self.dorsal = 1
         elif pitch < -1:
             self.dorsal = 0
-
-        # self.dorsal = 0.5
 
     def depth_waltz(self, r_move_g):
         """Controls diving depth in a pressure sensor fashion. Own depth is "measured", i.e. reveiled by the interaction. Depth control is then done based on a target depth coming from a desired goal location in the robot frame.
@@ -659,23 +600,20 @@ class Fish():
 
         if dist > target_dist:
             if heading < 90:
-                self.caudal = 0.4
+                self.caudal = 0.45
                 self.pect_l = 0
                 self.pect_r = 0
             else:
-                # push fish into center
-                self.caudal = 0.25
+                self.caudal = 0.3
                 self.pect_l = 1
                 self.pect_r = 0
         else:
             if heading < 90:
-                # push fish away from center
-                self.caudal = 0.4
+                self.caudal = 0.45
                 self.pect_l = 0
                 self.pect_r = 1
             else:
-                # continue to out of center 
-                self.caudal = 0.4
+                self.caudal = 0.45
                 self.pect_l = 0
                 self.pect_r = 0
 
@@ -706,67 +644,16 @@ class Fish():
             self.dorsal = 1
         if np.random.random() < 0.33:
             self.pect_l = 0
-            self.pect_r = np.random.random()
+            self.pect_r = 0.5
             self.caudal = 0.1
         elif np.random.random() < 0.5:
-            self.pect_l = np.random.random()
+            self.pect_l = 0.5
             self.pect_r = 0
             self.caudal = 0.1
         else:
             self.pect_l = 0
             self.pect_r = 0
             self.caudal = 0.45
-            
-    def repel(self, neighbors, rel_pos):
-        # Get the centroid of the swarm
-        centroid_pos = np.zeros((3,))
-
-        # Get the relative direction to the centroid of the swarm
-        bestnorm = 1000000
-        bestkey = -1
-        if len(rel_pos.keys()) == 0:
-            self.randomwalk()
-            return
-        for key in rel_pos.keys():
-            norm = np.linalg.norm(rel_pos[key])
-            if (norm < bestnorm):
-                bestnorm = norm
-                bestkey = key
-        centroid_pos = rel_pos[bestkey]
-        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
-
-        #move = self.target_pos + centroid_pos
-        move = - centroid_pos / (bestnorm + 1)
-
-        # Global to Robot Transformation
-        r_T_g = self.interaction.rot_global_to_robot(self.id)
-        r_move_g = r_T_g @ move
-
-
-        self.depth_ctrl(r_move_g)
-        self.home(r_move_g)
-        
-    def repel_with_memory(self, neighbors, rel_pos):
-        # Get the centroid of the swarm
-        centroid_pos = np.zeros((3,))
-
-        # Get the relative direction to the centroid of the swarm
-        centroid_pos = self.lj_force(neighbors, rel_pos)
-        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
-
-        #move = self.target_pos + centroid_pos
-        if (self.movement is None):
-            self.movement = - centroid_pos
-        else:
-            self.movement = 0.1 * (- centroid_pos) + 0.9 * self.movement
-
-        # Global to Robot Transformation
-        r_T_g = self.interaction.rot_global_to_robot(self.id)
-        r_move_g = r_T_g @ self.movement
-
-
-        self.depth_ctrl(r_move_g)
-        self.home(r_move_g)
 
     def move(self, neighbors, rel_pos):
         """Make a cohesion and target-driven move
@@ -785,44 +672,43 @@ class Fish():
             np.array -- Move direction as a 3D vector
         """
 
-        centroid_pos = np.zeros((3,))
-        move = self.target_pos# + centroid_pos
+        # Get the centroid of the swarm
+        #centroid_pos = np.zeros((3,))
+
+        # Get the relative direction to the centroid of the swarm
+        #centroid_pos = self.lj_force(neighbors, rel_pos)
+        #self.d_center = np.linalg.norm(self.comp_center(rel_pos))
+
+        #move = self.target_pos + centroid_pos
+        #move = - centroid_pos
+
         # Global to Robot Transformation
-        r_T_g = self.interaction.rot_global_to_robot(self.id)
-        r_move_g = r_T_g @ move
-        # Simulate dynamics and restrict movement #xx
-        self.depth_ctrl(r_move_g)
+        #r_T_g = self.interaction.rot_global_to_robot(self.id)
+        #r_move_g = r_T_g @ move
+
+
+        #self.depth_ctrl(r_move_g)
+        #self.home(r_move_g)
+        self.randomwalk()
         
-        # # Orbiting
-        # #################################################
-        # target_dist = 400
-
-        # if self.behavior == 'home':
-        #     dist_filtered = np.linalg.norm(r_move_g)
-        #     if dist_filtered < target_dist * 1.2:
-        #         self.behavior = 'transition'
-        #     else:
-        #         self.home(r_move_g)
-        # elif self.behavior == 'transition':
-        #     self.transition(r_move_g)
-        # elif self.behavior == 'orbit':
-        #     self.orbit(r_move_g, target_dist)
-        # # Orbiting
-        # #################################################
-
-        self.repel(neighbors, rel_pos)
-
         loc = self.interaction.environment.node_pos[self.id]
-        vel = self.interaction.environment.node_vel[self.id]
-        self.camera.set_camera(loc, vel)
 
-        for i in range(len(self.corners)) :
-            for j in range(len(self.corners[0])) :
-                for k in range(len(self.corners[0, :])) :
-                    tile = self.corners[i][j][k]
-                    if self.camera.captured_by_camera(tile) :
-                        self.variables.set_var((i, j, k), 1)
+        xb, xt, yb, yt, zb, zt = variables.get_vars()
 
+        if loc[0] < 30:
+            xb.add((loc[1] // 100, loc[2] // 100))
+        elif loc[0] > 1750: # hardcode for now
+            xt.add((loc[1] // 100, loc[2] // 100))
+        if loc[1] < 30:
+            yb.add((loc[0] // 100, loc[2] // 100))
+        elif loc[1] > 1750:
+            yt.add((loc[0] // 100, loc[2] // 100))
+        if loc[2] < 30:
+            zb.add((loc[0] // 100, loc[1] // 100))
+        elif loc[2] > 1140:
+            zt.add((loc[0] // 100, loc[1] // 100))
+
+        variables.set_vars(xb, xt, yb, yt, zb, zt)
 
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
         final_move = self.dynamics.simulate_move(self.id)

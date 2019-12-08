@@ -121,8 +121,7 @@ class Fish():
         self.camera = camera
         self.variables = variables
         if self.id == 0 :
-            print(self.corners.shape)
-            self.variables.set_vars(self.corners.shape)
+            self.variables.set_vars(len(self.corners))
 
         self.caudal = 0
         self.dorsal = 0
@@ -207,8 +206,7 @@ class Fish():
         yz_zz_x_end = np.array([x_end, yz, zz])
         yz_by_zz_x_end = yz_zz_x_end.transpose()
 
-        walls = np.array([xz_by_zz_y_0, xz_by_zz_y_end, yz_by_zz_x_0, yz_by_zz_x_end])
-        return walls 
+        walls = [xz_by_zz_y_0, xz_by_zz_y_end, yz_by_zz_x_0, yz_by_zz_x_end]
 
         # tiles = []
         # for wall in walls :
@@ -218,12 +216,12 @@ class Fish():
         #             tiles.append(four)
         # return tiles
 
-        # tiles = []
-        # for wall in walls :
-        #     for i in range(res) :
-        #         for j in range(res) :
-        #             tiles.append(wall[i, j])
-        # return tiles
+        tiles = []
+        for wall in walls :
+            for i in range(res) :
+                for j in range(res) :
+                    tiles.append(wall[i, j])
+        return tiles
 
     def log(self, neighbors=set()):
         """Log current state
@@ -556,8 +554,6 @@ class Fish():
         elif pitch < -1:
             self.dorsal = 0
 
-        # self.dorsal = 0.5
-
     def depth_waltz(self, r_move_g):
         """Controls diving depth in a pressure sensor fashion. Own depth is "measured", i.e. reveiled by the interaction. Depth control is then done based on a target depth coming from a desired goal location in the robot frame.
 
@@ -659,23 +655,20 @@ class Fish():
 
         if dist > target_dist:
             if heading < 90:
-                self.caudal = 0.4
+                self.caudal = 0.45
                 self.pect_l = 0
                 self.pect_r = 0
             else:
-                # push fish into center
-                self.caudal = 0.25
+                self.caudal = 0.3
                 self.pect_l = 1
                 self.pect_r = 0
         else:
             if heading < 90:
-                # push fish away from center
-                self.caudal = 0.4
+                self.caudal = 0.45
                 self.pect_l = 0
                 self.pect_r = 1
             else:
-                # continue to out of center 
-                self.caudal = 0.4
+                self.caudal = 0.45
                 self.pect_l = 0
                 self.pect_r = 0
 
@@ -784,44 +777,27 @@ class Fish():
         Returns:
             np.array -- Move direction as a 3D vector
         """
-
         centroid_pos = np.zeros((3,))
         move = self.target_pos# + centroid_pos
         # Global to Robot Transformation
         r_T_g = self.interaction.rot_global_to_robot(self.id)
         r_move_g = r_T_g @ move
+
         # Simulate dynamics and restrict movement #xx
         self.depth_ctrl(r_move_g)
-        
-        # # Orbiting
-        # #################################################
-        # target_dist = 400
 
-        # if self.behavior == 'home':
-        #     dist_filtered = np.linalg.norm(r_move_g)
-        #     if dist_filtered < target_dist * 1.2:
-        #         self.behavior = 'transition'
-        #     else:
-        #         self.home(r_move_g)
-        # elif self.behavior == 'transition':
-        #     self.transition(r_move_g)
-        # elif self.behavior == 'orbit':
-        #     self.orbit(r_move_g, target_dist)
-        # # Orbiting
-        # #################################################
-
+        #self.depth_ctrl(r_move_g)
+        #self.home(r_move_g)
         self.repel(neighbors, rel_pos)
-
+        
         loc = self.interaction.environment.node_pos[self.id]
         vel = self.interaction.environment.node_vel[self.id]
         self.camera.set_camera(loc, vel)
 
         for i in range(len(self.corners)) :
-            for j in range(len(self.corners[0])) :
-                for k in range(len(self.corners[0, :])) :
-                    tile = self.corners[i][j][k]
-                    if self.camera.captured_by_camera(tile) :
-                        self.variables.set_var((i, j, k), 1)
+            tile = self.corners[i]
+            if self.camera.captured_by_camera(tile) :
+                self.variables.set_var(i, 1)
 
 
         self.dynamics.update_ctrl(self.dorsal, self.caudal, self.pect_r, self.pect_l)
