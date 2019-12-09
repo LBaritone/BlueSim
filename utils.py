@@ -323,6 +323,8 @@ def run_simulation_with_coverage(
 
         variables = fish[0].get_variables()
 
+        print("movements: ", fish[0].get_count())
+
         for f in fish:
             f.stop()
 

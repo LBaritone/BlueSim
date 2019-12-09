@@ -117,6 +117,8 @@ class Fish():
         self.name = name
         self.verbose = verbose
 
+        self.count = 0 
+
         self.corners = self.get_corners(res)
         self.camera = camera
         self.variables = variables
@@ -184,6 +186,9 @@ class Fish():
 
     def get_variables(self) :
         return self.variables
+
+    def get_count(self) :
+        return self.count
 
     def get_corners(self, res) :
         arena_size = self.interaction.environment.arena_size
@@ -529,6 +534,8 @@ class Fish():
 
 
     def move(self, neighbors, rel_pos):
+
+        self.count += 1
         """Make a cohesion and target-driven move
 
         The move is determined by the relative position of the centroid and a
